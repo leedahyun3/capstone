@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>KBO 팀순위</title>
+  <style>
+    body { font-family: 'Noto Sans KR', Arial, sans-serif; background:#f8f9fa; margin:0; padding:0; }
+    .ranking-container { max-width:360px; margin:40px auto; background:#fff; border-radius:10px; box-shadow:0 2px 8px #ddd; padding:24px 0; }
+    .ranking-title { font-size:1.2em; font-weight:bold; margin:0 0 8px 24px; color:#222; }
+    .updated-at { margin-left:24px; margin-bottom:12px; color:#666; font-size:.9em; }
+    table { width:90%; margin:0 auto; border-collapse:collapse; background:#fff; }
+    th, td { padding:8px 4px; text-align:center; vertical-align:middle; font-size:1em; }
+    th { background:#f8f9fa; color:#222; font-weight:bold; border-bottom:1px solid #e2e8f0; }
+    tr { border-bottom:1px solid #e2e8f0; }
+    tr:last-child { border-bottom:none; }
+    .team-logo { width:32px; height:32px; object-fit:contain; vertical-align:middle; margin-right:8px; }
+    .team-name { font-weight:bold; color:#222; font-size:1em; vertical-align:middle; }
+    .selected-row { background:#e3f2fd !important; }
+    @media (max-width: 500px) {
+      .ranking-container { max-width:100%; padding:8px 0; }
+      table { width:98%; }
+      th, td { font-size:.95em; padding:4px 2px; }
+      .team-logo { width:20px; height:20px; margin-right:4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ranking-container">
+    <div class="ranking-title">팀순위</div>
+    <div class="updated-at">
+      {% if updated_at %}갱신: {{ updated_at.strftime("%Y-%m-%d %H:%M") }}{% else %}갱신 준비 중...{% endif %}
+    </div>
+
+    <select id="team-select" style="margin: 0 0 16px 24px;">
+      <option value="">구단 선택</option>
+      {% for team in rankings %}
+      <option value="{{ team.team_name }}">{{ team.team_name }}</option>
+      {% endfor %}
+    </select>
+
+    <table>
+      <thead>
+      <tr>
+        <th>순위</th><th>팀</th><th>승</th><th>패</th><th>무</th><th>게임차</th>
+      </tr>
+      </thead>
+      <tbody>
+      {% for team in rankings %}
+      <tr data-team="{{ team.team_name }}">
+        <td>{{ team.rank }}</td>
+        <td>
+          <img class="team-logo" src="/proxy-logo?url={{ team.logo | urlencode }}" alt="{{ team.team_name }} 로고">
+          <span class="team-name">{{ team.team_name }}</span>
+        </td>
+        <td>{{ team.wins }}</td>
+        <td>{{ team.losses }}</td>
+        <td>{{ team.draws }}</td>
+        <td>{{ team.gb }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+<script>
+  document.getElementById('team-select').addEventListener('change', function() {
+    const selected = this.value;
+    document.querySelectorAll('tbody tr').forEach(tr => {
+      if (tr.getAttribute('data-team') === selected) tr.classList.add('selected-row');
+      else tr.classList.remove('selected-row');
+    });
+  });
+</script>
+</body>
+</html>
