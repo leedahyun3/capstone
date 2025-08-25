@@ -11,7 +11,13 @@ import requests
 
 from team_ranking_alt import fetch_team_rankings
 
+# ✅ 평균 경기시간 블루프린트 임포트
+from hour_back_alt import hour_bp
+
 app = Flask(__name__, template_folder="templates")
+
+# ✅ 블루프린트 등록 (/hour 경로 활성화)
+app.register_blueprint(hour_bp)
 
 # ---- 설정 ----
 CACHE_INTERVAL_MIN = int(os.getenv("CACHE_INTERVAL_MIN", "5"))          # 주기(분)
@@ -22,9 +28,7 @@ CACHE_FILE = os.getenv("CACHE_FILE", os.path.join(os.getcwd(), "cache.json"))
 _cache_lock = threading.Lock()
 _cache_data = {"rankings": [], "updated_at": None}  # updated_at: datetime | None
 
-
 # ============== 디스크 캐시 유틸 ==============
-
 def _dt_to_iso(dt):
     return dt.isoformat() if isinstance(dt, datetime) else None
 
@@ -35,7 +39,6 @@ def _iso_to_dt(s):
         return None
 
 def load_cache_from_disk():
-    """서버 부팅/콜드스타트 시, 디스크의 JSON 캐시를 메모리로 로드."""
     if not os.path.exists(CACHE_FILE):
         return
     try:
@@ -51,7 +54,6 @@ def load_cache_from_disk():
         print(f"[CACHE] load error: {e}")
 
 def save_cache_to_disk():
-    """메모리 캐시를 JSON으로 디스크에 원자적으로 저장."""
     try:
         tmp_path = CACHE_FILE + ".tmp"
         with _cache_lock:
@@ -61,8 +63,7 @@ def save_cache_to_disk():
             }
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, CACHE_FILE)  # 원자적 교체
-        # 권한(선택): 읽기 전용으로 완화
+        os.replace(tmp_path, CACHE_FILE)
         try:
             os.chmod(CACHE_FILE, 0o644)
         except Exception:
@@ -71,11 +72,8 @@ def save_cache_to_disk():
     except Exception as e:
         print(f"[CACHE] save error: {e}")
 
-
 # ============== 캐시 갱신 로직 ==============
-
 def refresh_cache():
-    """크롤링 → 메모리 캐시 갱신 → 디스크 저장."""
     global _cache_data
     try:
         data = fetch_team_rankings()
@@ -90,28 +88,27 @@ def refresh_cache():
     except Exception as e:
         print(f"[CACHE] refresh error: {e}")
 
-
 # ============== 스케줄러 ==============
-
 scheduler = BackgroundScheduler(timezone="Asia/Seoul")
 scheduler.add_job(refresh_cache, "interval", minutes=CACHE_INTERVAL_MIN, next_run_time=datetime.now())
 scheduler.start()
 
+# ============== 루트: 통합 페이지 ==============
+@app.route("/", methods=["GET"])
+def dashboard():
+    return render_template("combined.html")  # templates/combined.html
 
-# ============== 라우팅 ==============
-
+# ============== 라우팅(팀 순위 단독 페이지) ==============
 @app.route("/team-ranking")
 def show_ranking():
     with _cache_lock:
         rankings = list(_cache_data["rankings"])
         updated_at = _cache_data["updated_at"]
     if not rankings:
-        # 콜드스타트: 먼저 디스크에서 로드 시도
         load_cache_from_disk()
         with _cache_lock:
             rankings = list(_cache_data["rankings"])
             updated_at = _cache_data["updated_at"]
-        # 그래도 없으면 즉시 1회 크롤
         if not rankings:
             refresh_cache()
             with _cache_lock:
@@ -121,7 +118,6 @@ def show_ranking():
 
 @app.route("/team-ranking.json")
 def show_ranking_json():
-    """메모리 캐시를 JSON으로 반환(실시간 상태)."""
     with _cache_lock:
         payload = {
             "updated_at": _dt_to_iso(_cache_data["updated_at"]),
@@ -131,10 +127,6 @@ def show_ranking_json():
 
 @app.route("/cache.json")
 def download_cache_json():
-    """
-    디스크에 저장된 JSON 파일을 그대로 반환(사람이 보기 좋은 pretty JSON).
-    파일이 없으면 빈 구조 반환.
-    """
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             raw = f.read()
@@ -167,7 +159,7 @@ def proxy_logo():
             "Referer": "https://sports.naver.com",
             "User-Agent": (
                 "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) "
-                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
+                "AppleWebKit(605.1.15) (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
             )
         }
         response = requests.get(url, headers=headers, timeout=8)
@@ -177,13 +169,9 @@ def proxy_logo():
     except Exception as e:
         return f"Error fetching image: {str(e)}", 500
 
-
-# ============== 부팅 시 동작 ==============
-
+# ============== 부팅 시 동작 (로컬 실행용) ==============
 if __name__ == "__main__":
-    # 1) 디스크 캐시 선로드(있다면)
     load_cache_from_disk()
-    # 2) 첫 갱신 시도(없을 때 대비)
     if not _cache_data["rankings"]:
         refresh_cache()
     port = int(os.getenv("PORT", "5001"))
