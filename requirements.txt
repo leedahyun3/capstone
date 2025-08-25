@@ -4,3 +4,4 @@ beautifulsoup4==4.12.3
 selenium==4.23.1
 apscheduler==3.10.4
 gunicorn==22.0.0
+pandas==2.2.2 
