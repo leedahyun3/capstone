@@ -1,8 +1,8 @@
 # hour_back_alt.py
-# - "평균 경기시간" 기능을 독립 실행도 되고, 다른 Flask 앱에 블루프린트로도 붙일 수 있게 구성
-# - 템플릿 파일은 templates/hour_alt.html 을 사용
-
+# - "평균 경기시간" 블루프린트
+# - 템플릿은 templates/hour_alt.html (절대경로 지정)
 from flask import Flask, Blueprint, request, render_template
+from jinja2 import TemplateNotFound
 import time, os, json, re
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -14,15 +14,13 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 # ===================== 설정/상수 =====================
-# 기준값 (분)
 TOP30 = 168
 AVG_REF = 182.7
 BOTTOM70 = 194
 START_DATE = "2025-03-22"
 
-# 캐시 파일(JSON, 최소 필드만 저장)
-RUNTIME_CACHE_FILE = "runtime_cache.json"     # key: "{game_id}_{game_date}" -> {"runtime_min": int}
-SCHEDULE_CACHE_FILE = "schedule_index.json"   # key: "YYYYMMDD" -> [ {"home","away","g_id","g_dt"} ]
+RUNTIME_CACHE_FILE = "runtime_cache.json"
+SCHEDULE_CACHE_FILE = "schedule_index.json"
 
 # ===================== 유틸: JSON 로드/세이브 =====================
 def _load_json(path, default):
@@ -45,7 +43,7 @@ def get_runtime_cache():
 
 def set_runtime_cache(key, runtime_min):
     cache = get_runtime_cache()
-    cache[key] = {"runtime_min": runtime_min}  # 필요한 것만 저장
+    cache[key] = {"runtime_min": runtime_min}
     _save_json(RUNTIME_CACHE_FILE, cache)
 
 def get_schedule_cache():
@@ -53,7 +51,7 @@ def get_schedule_cache():
 
 def set_schedule_cache_for_date(date_str, games_minimal_list):
     cache = get_schedule_cache()
-    cache[date_str] = games_minimal_list  # 필요한 것만 저장
+    cache[date_str] = games_minimal_list
     _save_json(SCHEDULE_CACHE_FILE, cache)
 
 def make_runtime_key(game_id: str, game_date: str) -> str:
@@ -70,14 +68,12 @@ def delete_all_caches():
 # ===================== Selenium 드라이버 =====================
 def make_driver():
     options = Options()
-    options.add_argument("--disable-gpu")
     options.add_argument("--headless=new")
+    options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,1200")
-    options.add_argument("--no-sandbox")              # ← 추가
-    options.add_argument("--disable-dev-shm-usage")   # ← 추가
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     options.binary_location = os.environ.get("CHROME_BIN", "/usr/bin/chromium")
-    # 필요 시 UA 추가
-    # options.add_argument("user-agent=Mozilla/5.0 ...")
     return webdriver.Chrome(options=options)
 
 # ===================== 스케줄/경기카드 파싱 =====================
@@ -92,13 +88,11 @@ def get_today_cards(driver):
     return cards
 
 def extract_match_info_from_card(card_li):
-    # 신형/구형 DOM 모두 커버
     home_nm = card_li.get("home_nm")
     away_nm = card_li.get("away_nm")
     g_id = card_li.get("g_id")
     g_dt = card_li.get("g_dt")
 
-    # 이미지 alt 백업
     if not (home_nm and away_nm):
         home_alt = card_li.select_one(".team.home .emb img")
         away_alt = card_li.select_one(".team.away .emb img")
@@ -107,7 +101,6 @@ def extract_match_info_from_card(card_li):
         if home_alt and not home_nm:
             home_nm = home_alt.get("alt", "").strip() or None
 
-    # 텍스트 백업: "... A vs B ..." 패턴
     if not (home_nm and away_nm):
         txt = card_li.get_text(" ", strip=True)
         m = re.search(r"([A-Za-z가-힣]+)\s*vs\s*([A-Za-z가-힣]+)", txt, re.I)
@@ -116,7 +109,6 @@ def extract_match_info_from_card(card_li):
             away_nm = away_nm or a
             home_nm = home_nm or b
 
-    # 상세 링크에서 파라미터 추출 백업
     if not (g_id and g_dt):
         a = card_li.select_one("a[href*='GameCenter/Main.aspx'][href*='gameId='][href*='gameDate=']")
         if a and a.has_attr("href"):
@@ -128,12 +120,7 @@ def extract_match_info_from_card(card_li):
             if dm:
                 g_dt = g_dt or dm.group(1)
 
-    return {
-        "home": home_nm,
-        "away": away_nm,
-        "g_id": g_id,
-        "g_dt": g_dt,
-    }
+    return {"home": home_nm, "away": away_nm, "g_id": g_id, "g_dt": g_dt}
 
 def find_today_matches_for_team(driver, my_team):
     cards = get_today_cards(driver)
@@ -149,11 +136,7 @@ def find_today_matches_for_team(driver, my_team):
             results.append(info)
     return results
 
-# 날짜별 스케줄(최소필드) 캐시
 def get_games_for_date(driver, date_str):
-    """
-    반환: [ {"home","away","g_id","g_dt"} ... ]
-    """
     cache = get_schedule_cache()
     if date_str in cache:
         return cache[date_str]
@@ -179,28 +162,20 @@ def get_games_for_date(driver, date_str):
                 "g_id": info["g_id"],
                 "g_dt": info["g_dt"],
             })
-
     set_schedule_cache_for_date(date_str, games_minimal)
     return games_minimal
 
-# ===================== 리뷰 탭에서 런타임(분) 추출 =====================
 def open_review_and_get_runtime(driver, game_id, game_date):
-    """
-    리뷰 탭에서 경기 소요 시간(분)을 파싱.
-    - 오늘 날짜(game_date == today)는 캐시 무시 (진행 중 가능성)
-    """
     today_str = datetime.today().strftime("%Y%m%d")
     use_cache = (game_date != today_str)
     key = make_runtime_key(game_id, game_date)
 
-    # 캐시 조회
     if use_cache:
         rc = get_runtime_cache()
         hit = rc.get(key)
         if hit and isinstance(hit, dict) and "runtime_min" in hit:
             return hit["runtime_min"]
 
-    # 실제 크롤링
     base = f"https://www.koreabaseball.com/Schedule/GameCenter/Main.aspx?gameId={game_id}&gameDate={game_date}"
     driver.get(base)
     time.sleep(1.5)
@@ -230,22 +205,12 @@ def open_review_and_get_runtime(driver, game_id, game_date):
                 h, mnt = int(m.group(1)), int(m.group(2))
                 run_time_min = h * 60 + mnt
 
-    # 캐시에 저장
     if use_cache and run_time_min is not None:
         set_runtime_cache(key, run_time_min)
-
     return run_time_min
 
-# ===================== 과거 평균 런타임 집계 =====================
 def collect_history_avg_runtime(my_team, rival_set, start_date=START_DATE):
-    """
-    - 오늘 제외 (미완성 데이터 차단)
-    - 게임별 런타임은 open_review_and_get_runtime에서 캐시됨 (runtime_min만 저장)
-    - 날짜별 스케줄도 최소필드만 캐시
-    """
     driver = make_driver()
-
-    # 오늘 제외
     today_minus_1 = (datetime.today() - timedelta(days=1)).strftime("%Y%m%d")
     date_list = [d.strftime("%Y%m%d") for d in pd.date_range(start=start_date, end=today_minus_1)]
 
@@ -266,19 +231,18 @@ def collect_history_avg_runtime(my_team, rival_set, start_date=START_DATE):
                     rt = None
                 if rt is not None:
                     run_times.append(rt)
-
     driver.quit()
 
     if run_times:
         avg_time = round(sum(run_times) / len(run_times), 1)
         return avg_time, run_times
-    else:
-        return None, []
+    return None, []
 
-# ===================== 블루프린트 & 앱 팩토리 =====================
-hour_bp = Blueprint("hour_alt", __name__, template_folder="templates")
+# ===================== 블루프린트 =====================
+TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+hour_bp = Blueprint("hour_alt", __name__, template_folder=TEMPLATE_DIR, url_prefix="/hour")
 
-@hour_bp.route("/hour", methods=["GET", "POST"])
+@hour_bp.route("/", methods=["GET", "POST"])
 def hour_index():
     result = None
     avg_time = None
@@ -290,31 +254,30 @@ def hour_index():
         MY_TEAM = request.form.get("myteam")
         selected_team = MY_TEAM
         if not MY_TEAM:
-            result = "팀을 선택해주세요."
-            return render_template(
-                "hour_alt.html",
-                result=result, avg_time=avg_time, css_class=css_class, msg=msg,
-                selected_team=selected_team, top30=TOP30, avg_ref=AVG_REF, bottom70=BOTTOM70
-            )
+            try:
+                return render_template("hour_alt.html",
+                                       result="팀을 선택해주세요.", avg_time=None, css_class="", msg="",
+                                       selected_team=selected_team, top30=TOP30, avg_ref=AVG_REF, bottom70=BOTTOM70)
+            except TemplateNotFound:
+                return "<div>템플릿(hour_alt.html)이 없습니다.</div>", 200
 
-        # 오늘 경기의 상대팀 찾기
         driver = make_driver()
         today_matches = find_today_matches_for_team(driver, MY_TEAM)
         driver.quit()
 
         if not today_matches:
-            result = f"{MY_TEAM}의 오늘 경기를 찾지 못했습니다."
-            return render_template(
-                "hour_alt.html",
-                result=result, avg_time=avg_time, css_class=css_class, msg=msg,
-                selected_team=selected_team, top30=TOP30, avg_ref=AVG_REF, bottom70=BOTTOM70
-            )
+            try:
+                return render_template("hour_alt.html",
+                                       result=f"{MY_TEAM}의 오늘 경기를 찾지 못했습니다.",
+                                       avg_time=None, css_class="", msg="",
+                                       selected_team=selected_team, top30=TOP30, avg_ref=AVG_REF, bottom70=BOTTOM70)
+            except TemplateNotFound:
+                return f"<div>{MY_TEAM}의 오늘 경기를 찾지 못했습니다.</div>", 200
 
         rivals_today = {m["rival"] for m in today_matches if m.get("rival")}
         rivals_str = ", ".join(rivals_today)
         result = f"오늘 {MY_TEAM}의 상대팀은 {rivals_str}입니다."
 
-        # 과거 평균 경기시간 계산 (오늘 제외)
         avg_time, _ = collect_history_avg_runtime(MY_TEAM, rivals_today)
 
         if avg_time is not None:
@@ -326,24 +289,23 @@ def hour_index():
                 css_class, msg = "bit-long", "조금 긴 편이에요"
             else:
                 css_class, msg = "long", "시간 오래 걸리는 매치업입니다"
-            result = f"오늘 {MY_TEAM}의 상대팀은 {rivals_str}입니다.<br>과거 {MY_TEAM} vs {rivals_str} 평균 경기시간: {avg_time}분"
+            result = (f"오늘 {MY_TEAM}의 상대팀은 {rivals_str}입니다.<br>"
+                      f"과거 {MY_TEAM} vs {rivals_str} 평균 경기시간: {avg_time}분")
         else:
             result = f"오늘 {MY_TEAM}의 상대팀은 {rivals_str}입니다.<br>과거 경기 데이터가 없습니다."
 
-    return render_template(
-        "hour_alt.html",
-        result=result, avg_time=avg_time, css_class=css_class, msg=msg,
-        selected_team=selected_team, top30=TOP30, avg_ref=AVG_REF, bottom70=BOTTOM70
-    )
+    try:
+        return render_template("hour_alt.html",
+                               result=result, avg_time=avg_time, css_class=css_class, msg=msg,
+                               selected_team=selected_team, top30=TOP30, avg_ref=AVG_REF, bottom70=BOTTOM70)
+    except TemplateNotFound:
+        return "<div>템플릿(hour_alt.html)이 없습니다.</div>", 200
 
 def create_app():
     app = Flask(__name__)
     app.register_blueprint(hour_bp)
     return app
 
-# 독립 실행 지원 (테스트/개발용)
 if __name__ == "__main__":
     app = create_app()
     app.run(debug=True, port=5002, use_reloader=False)
-
-
