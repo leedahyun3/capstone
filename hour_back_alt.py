@@ -73,6 +73,8 @@ def make_driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--headless=new")
     options.add_argument("--window-size=1280,1200")
+    options.add_argument("--no-sandbox")              # ← 추가
+    options.add_argument("--disable-dev-shm-usage")   # ← 추가
     # 필요 시 UA 추가
     # options.add_argument("user-agent=Mozilla/5.0 ...")
     return webdriver.Chrome(options=options)
@@ -342,3 +344,4 @@ def create_app():
 if __name__ == "__main__":
     app = create_app()
     app.run(debug=True, port=5002, use_reloader=False)
+
