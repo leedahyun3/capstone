@@ -1,4 +1,3 @@
-# team_ranking_back_alt.py
 import os
 import json
 import threading
@@ -8,27 +7,26 @@ from io import BytesIO
 from flask import Flask, render_template, request, send_file, jsonify, abort, Response
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
+from jinja2 import TemplateNotFound
 
 from team_ranking_alt import fetch_team_rankings
 
-# ✅ 평균 경기시간 블루프린트 임포트
+# ✅ 평균 경기시간 블루프린트 임포트 & 등록
 from hour_back_alt import hour_bp
 
 app = Flask(__name__, template_folder="templates")
-
-# ✅ 블루프린트 등록 (/hour 경로 활성화)
-app.register_blueprint(hour_bp)
+app.register_blueprint(hour_bp)  # /hour 활성화
 
 # ---- 설정 ----
-CACHE_INTERVAL_MIN = int(os.getenv("CACHE_INTERVAL_MIN", "5"))          # 주기(분)
-REFRESH_TOKEN = os.getenv("REFRESH_TOKEN", "")                          # /refresh 보호용
+CACHE_INTERVAL_MIN = int(os.getenv("CACHE_INTERVAL_MIN", "5"))
+REFRESH_TOKEN = os.getenv("REFRESH_TOKEN", "")
 CACHE_FILE = os.getenv("CACHE_FILE", os.path.join(os.getcwd(), "cache.json"))
 
 # ---- 메모리 캐시 ----
 _cache_lock = threading.Lock()
-_cache_data = {"rankings": [], "updated_at": None}  # updated_at: datetime | None
+_cache_data = {"rankings": [], "updated_at": None}
 
-# ============== 디스크 캐시 유틸 ==============
+# ============== 유틸 ==============
 def _dt_to_iso(dt):
     return dt.isoformat() if isinstance(dt, datetime) else None
 
@@ -49,7 +47,7 @@ def load_cache_from_disk():
         with _cache_lock:
             _cache_data["rankings"] = rankings
             _cache_data["updated_at"] = updated_at
-        print(f"[CACHE] loaded from disk ({CACHE_FILE}), updated_at={updated_at}")
+        print(f"[CACHE] loaded ({CACHE_FILE}), updated_at={updated_at}")
     except Exception as e:
         print(f"[CACHE] load error: {e}")
 
@@ -64,15 +62,13 @@ def save_cache_to_disk():
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, CACHE_FILE)
-        try:
-            os.chmod(CACHE_FILE, 0o644)
-        except Exception:
-            pass
-        print(f"[CACHE] saved to disk ({CACHE_FILE})")
+        try: os.chmod(CACHE_FILE, 0o644)
+        except Exception: pass
+        print(f"[CACHE] saved ({CACHE_FILE})")
     except Exception as e:
         print(f"[CACHE] save error: {e}")
 
-# ============== 캐시 갱신 로직 ==============
+# ============== 캐시 갱신 ==============
 def refresh_cache():
     global _cache_data
     try:
@@ -93,12 +89,24 @@ scheduler = BackgroundScheduler(timezone="Asia/Seoul")
 scheduler.add_job(refresh_cache, "interval", minutes=CACHE_INTERVAL_MIN, next_run_time=datetime.now())
 scheduler.start()
 
-# ============== 루트: 통합 페이지 ==============
+# ============== 헬스체크 & 루트 ==============
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
 @app.route("/", methods=["GET"])
 def dashboard():
-    return render_template("combined.html")  # templates/combined.html
+    try:
+        return render_template("combined.html")  # 아래 템플릿 추가 필요
+    except TemplateNotFound:
+        # 템플릿이 아직 없어서 500 나는 것을 방지하는 폴백
+        return (
+            '<h3>대시보드 준비됨</h3>'
+            '<p><a href="/team-ranking">팀 순위</a> · <a href="/hour">평균 경기시간</a></p>',
+            200,
+        )
 
-# ============== 라우팅(팀 순위 단독 페이지) ==============
+# ============== 팀 순위 뷰들 ==============
 @app.route("/team-ranking")
 def show_ranking():
     with _cache_lock:
@@ -132,8 +140,7 @@ def download_cache_json():
             raw = f.read()
         return Response(raw, mimetype="application/json; charset=utf-8")
     else:
-        empty = {"updated_at": None, "rankings": []}
-        return jsonify(empty)
+        return jsonify({"updated_at": None, "rankings": []})
 
 @app.route("/refresh", methods=["POST", "GET"])
 def manual_refresh():
@@ -143,10 +150,7 @@ def manual_refresh():
             return abort(401)
     refresh_cache()
     with _cache_lock:
-        payload = {
-            "ok": True,
-            "updated_at": _dt_to_iso(_cache_data["updated_at"])
-        }
+        payload = {"ok": True, "updated_at": _dt_to_iso(_cache_data["updated_at"])}
     return jsonify(payload)
 
 @app.route("/proxy-logo")
@@ -157,10 +161,8 @@ def proxy_logo():
     try:
         headers = {
             "Referer": "https://sports.naver.com",
-            "User-Agent": (
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) "
-                "AppleWebKit(605.1.15) (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
-            )
+            "User-Agent": ("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) "
+                           "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1")
         }
         response = requests.get(url, headers=headers, timeout=8)
         if response.status_code != 200:
@@ -169,10 +171,12 @@ def proxy_logo():
     except Exception as e:
         return f"Error fetching image: {str(e)}", 500
 
-# ============== 부팅 시 동작 (로컬 실행용) ==============
+# ============== 로컬 실행용 ==============
 if __name__ == "__main__":
     load_cache_from_disk()
     if not _cache_data["rankings"]:
         refresh_cache()
     port = int(os.getenv("PORT", "5001"))
     app.run(host="0.0.0.0", port=port, debug=True)
+
+
