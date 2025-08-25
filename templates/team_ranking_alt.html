@@ -11,6 +11,8 @@
     th, td { border: 1px solid #e6e6e9; padding: 6px 8px; font-size: 14px; text-align: center; }
     th { background: #f3f4f6; }
     .meta { font-size: 12px; color: #666; margin-bottom: 6px; }
+    .teamcell { display:flex; align-items:center; gap:8px; justify-content:center; }
+    .logo { width:28px; height:28px; object-fit:contain; border-radius:4px; }
   </style>
 </head>
 <body>
@@ -29,7 +31,29 @@
         <tbody>
           {% for r in rankings %}
             <tr>
-              {% for c in cols %}<td>{{ r.get(c, '') }}</td>{% endfor %}
+              {% for c in cols %}
+                <td>
+                  {% if c == 'logo' and r.get('logo') %}
+                    <!-- URL 문자열 대신 이미지로 표시 (핫링크 방지용 proxy 사용) -->
+                    <img class="logo"
+                         src="{{ url_for('proxy_logo') }}?url={{ r['logo']|urlencode }}"
+                         alt="{{ r.get('team_name','') }} 로고"
+                         loading="lazy">
+                  {% elif c == 'team_name' %}
+                    <div class="teamcell">
+                      {% if r.get('logo') %}
+                        <img class="logo"
+                             src="{{ url_for('proxy_logo') }}?url={{ r['logo']|urlencode }}"
+                             alt="{{ r.get('team_name','') }} 로고"
+                             loading="lazy">
+                      {% endif %}
+                      <span>{{ r.get('team_name','') }}</span>
+                    </div>
+                  {% else %}
+                    {{ r.get(c, '') }}
+                  {% endif %}
+                </td>
+              {% endfor %}
             </tr>
           {% endfor %}
         </tbody>
