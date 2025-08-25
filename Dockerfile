@@ -33,5 +33,3 @@ COPY . .
 # 선택 A: team_ranking_back_alt가 메인인 경우(블루프린트 등록을 코드에서 수행)
 CMD ["/bin/sh","-c","gunicorn team_ranking_back_alt:app -b 0.0.0.0:${PORT:-8000} --workers 2 --threads 4 --timeout 180"]
 
-# 선택 B: app.py 통합 엔트리포인트 사용 시 아래로 교체
-# CMD ["/bin/sh","-c","gunicorn app:app -b 0.0.0.0:${PORT:-8000} --workers 2 --threads 4 --timeout 180"]
