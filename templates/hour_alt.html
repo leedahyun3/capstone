@@ -2,149 +2,107 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>팀별 평균 경기시간 조회</title>
-    <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        body { 
-            font-family: 'Noto Sans KR', 'Jua', Arial, sans-serif; 
-            background: transparent; 
-            margin: 0; 
-            padding: 0;
-            overflow: hidden;
-        }
-        .container { 
-            max-width: 100%; 
-            margin: 0; 
-            background: #fff; 
-            border-radius: 12px; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
-            padding: 15px; 
-            height: 100vh;
-            box-sizing: border-box;
-        }
-        h2 { 
-            text-align: center; 
-            margin: 0 0 12px 0; 
-            font-family: 'Jua', 'Noto Sans KR', Arial, sans-serif; 
-            font-size: 1.25rem; 
-            color: #222; 
-            letter-spacing: .5px;
-        }
-        form { text-align: center; margin-bottom: 12px; }
-        select, button { font-size: 15px; padding: 6px 12px; margin: 0 4px; border-radius: 6px; border: 1px solid #bbb; background: #f7f7fb; transition: box-shadow 0.2s;}
-        select:focus, button:focus { box-shadow: 0 0 4px #ff9800; outline: none;}
-        hr { margin: 12px 0 12px 0; border: none; border-top: 1.5px solid #e0e0e0; }
-        .result-block { margin-bottom: 10px; }
-        .comment { font-size: 0.9rem; font-weight: bold; margin-top: 6px; color: #444; padding: 2px 0 0 0;}
-        .fast { background: none; }
-        .normal { background: linear-gradient(90deg, #2196f3 0%, #6dd5ed 100%);}
-        .bit-long { background: linear-gradient(90deg, #ff9800 0%, #ffc371 100%);}
-        .long { background: linear-gradient(90deg, #f44336 0%, #ff6a00 100%);}
-        .gauge-bar { width: 100%; height: 20px; background: #ececf0; border-radius: 10px; margin: 8px 0 4px 0; position: relative; box-shadow: 0 1px 4px #e0e0e0;}
-        .gauge-fill { height: 100%; border-radius: 10px; position: absolute; top: 0; left: 0; transition: width 0.8s cubic-bezier(.4,2,.3,1); }
-        .gauge-label { position: absolute; right: 8px; top: 0; font-weight: bold; color: #222; font-size: 0.8rem; line-height: 20px;}
-        .gauge-num { position: absolute; left: 8px; top: 0; font-weight: bold; color: #222; font-size: 0.8rem; line-height: 20px;}
-        
-        /* 구간 그래프 */
-        .section-graph { margin: 10px 0; }
-        .section-bar-container { display: flex; align-items: center; gap: 10px; }
-        .section-bar { 
-            height: 25px; 
-            border-radius: 12px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            transition: width 0.8s ease-in-out;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .section-label { 
-            color: white; 
-            font-weight: bold; 
-            font-size: 0.9rem; 
-            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-        }
-        .section-percentage { 
-            font-weight: bold; 
-            color: #333; 
-            font-size: 0.9rem; 
-            min-width: 40px;
-        }
-        
-        .team-info, .avg-info { font-size: 0.92rem; margin-bottom: 6px; color: #444;}
-        @media (max-width: 700px) {
-            .container { padding: 10px; }
-            h2 { font-size: 1.1rem;}
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>팀별 평균 경기시간 조회</title>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family:'Noto Sans KR','Jua',Arial,sans-serif; background:transparent; margin:0; padding:0; overflow:hidden; }
+    .container { max-width:100%; margin:0; background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.1); padding:15px; height:100vh; box-sizing:border-box; }
+    h2 { text-align:center; margin:0 0 12px 0; font-family:'Jua','Noto Sans KR',Arial,sans-serif; font-size:1.25rem; color:#222; letter-spacing:.5px; }
+    form { text-align:center; margin-bottom:12px; }
+    select,button { font-size:15px; padding:6px 12px; margin:0 4px; border-radius:6px; border:1px solid #bbb; background:#f7f7fb; transition:box-shadow .2s; }
+    select:focus,button:focus { box-shadow:0 0 4px #ff9800; outline:none; }
+    hr { margin:12px 0; border:none; border-top:1.5px solid #e0e0e0; }
+    .result-block { margin-bottom:10px; }
+    .comment { font-size:.9rem; font-weight:bold; margin-top:6px; color:#444; padding:2px 0 0 0; }
+    .fast { background:none; }
+    .normal { background:linear-gradient(90deg,#2196f3 0%,#6dd5ed 100%); }
+    .bit-long { background:linear-gradient(90deg,#ff9800 0%,#ffc371 100%); }
+    .long { background:linear-gradient(90deg,#f44336 0%,#ff6a00 100%); }
+
+    .section-graph { margin:10px 0; }
+    .section-bar-container { display:flex; align-items:center; gap:10px; }
+    .section-bar { height:25px; border-radius:12px; display:flex; align-items:center; justify-content:center; transition:width .8s ease-in-out; box-shadow:0 2px 4px rgba(0,0,0,.1); }
+    .section-label { color:white; font-weight:bold; font-size:.9rem; text-shadow:0 1px 2px rgba(0,0,0,.3); }
+    .section-percentage { font-weight:bold; color:#333; font-size:.9rem; min-width:40px; }
+    .avg-info { font-size:.92rem; margin-bottom:6px; color:#444; }
+
+    @media (max-width:700px){ .container{padding:10px;} h2{font-size:1.1rem;} }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h2>⚾ 팀별 평균 경기시간 조회</h2>
+  <div class="container">
+    <h2>⚾ 팀별 평균 경기시간 조회</h2>
 
-        <!-- 팀 선택 -->
-        <form method="post">
-            <label for="myteam">입장팀:</label>
-            <select name="myteam" id="myteam">
-                <option value="SSG"  {% if selected_team == 'SSG'  %}selected{% endif %}>SSG</option>
-                <option value="KIA"  {% if selected_team == 'KIA'  %}selected{% endif %}>KIA</option>
-                <option value="한화" {% if selected_team == '한화' %}selected{% endif %}>한화</option>
-                <option value="롯데" {% if selected_team == '롯데' %}selected{% endif %}>롯데</option>
-                <option value="두산" {% if selected_team == '두산' %}selected{% endif %}>두산</option>
-                <option value="LG"   {% if selected_team == 'LG'   %}selected{% endif %}>LG</option>
-                <option value="삼성" {% if selected_team == '삼성' %}selected{% endif %}>삼성</option>
-                <option value="KT"   {% if selected_team == 'KT'   %}selected{% endif %}>KT</option>
-                <option value="NC"   {% if selected_team == 'NC'   %}selected{% endif %}>NC</option>
-                <option value="키움" {% if selected_team == '키움' %}selected{% endif %}>키움</option>
-            </select>
-            <button type="submit">조회</button>
-        </form>
-        <hr>
+    <!-- 팀 선택 -->
+    <form method="post">
+      <label for="myteam">입장팀:</label>
+      <select name="myteam" id="myteam">
+        <option value="SSG"  {% if selected_team == 'SSG'  %}selected{% endif %}>SSG</option>
+        <option value="KIA"  {% if selected_team == 'KIA'  %}selected{% endif %}>KIA</option>
+        <option value="한화" {% if selected_team == '한화' %}selected{% endif %}>한화</option>
+        <option value="롯데" {% if selected_team == '롯데' %}selected{% endif %}>롯데</option>
+        <option value="두산" {% if selected_team == '두산' %}selected{% endif %}>두산</option>
+        <option value="LG"   {% if selected_team == 'LG'   %}selected{% endif %}>LG</option>
+        <option value="삼성" {% if selected_team == '삼성' %}selected{% endif %}>삼성</option>
+        <option value="KT"   {% if selected_team == 'KT'   %}selected{% endif %}>KT</option>
+        <option value="NC"   {% if selected_team == 'NC'   %}selected{% endif %}>NC</option>
+        <option value="키움" {% if selected_team == '키움' %}selected{% endif %}>키움</option>
+      </select>
+      <button type="submit">조회</button>
+    </form>
+    <hr>
 
-        {% if result %}
-        <div class="result-block">
-            {% set myteam = selected_team %}
-            {% set rival = result.split('상대팀은 ')[1].split('입니다')[0] if '상대팀은 ' in result else '' %}
-            {% if avg_time %}
-                <div class="avg-info"><strong>{{ myteam }} vs {{ rival }}의 평균 경기시간 : {{ avg_time }}분</strong></div>
-                
-                <!-- 구간별 그래프 -->
-                <div class="section-graph">
-                    {% if avg_time < top30 %}
-                        {% set section_name = "속전" %}
-                        {% set section_color = "#4CAF50" %}
-                        {% set section_width = 33.33 %}
-                    {% elif avg_time < avg_ref %}
-                        {% set section_name = "평균" %}
-                        {% set section_color = "#2196F3" %}
-                        {% set section_width = 33.33 %}
-                    {% else %}
-                        {% set section_name = "초과" %}
-                        {% set section_color = "#FF9800" %}
-                        {% set section_width = 33.34 %}
-                    {% endif %}
-                    
-                    {% set diff_percent = ((avg_time - avg_ref) / avg_ref * 100)|round(1) %}
-                    
-                    <div class="section-bar-container">
-                        <div class="section-bar" style="background-color: {{ section_color }}; width: {{ section_width }}%;">
-                            <span class="section-label">{{ section_name }}</span>
-                        </div>
-                        <div class="section-percentage">
-                            {% if diff_percent > 0 %}+{{ diff_percent }}%{% else %}{{ diff_percent }}%{% endif %}
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="comment">{{ msg }}</div>
-                <div style="font-size:10px; color:#888;">
-                    기준: 속전({{ top30 }}분 미만) / 평균({{ top30 }}–{{ avg_ref }}분) / 초과({{ avg_ref }}분 이상)
-                </div>
+    {% if result %}
+      <div class="result-block">
+        {% set myteam = selected_team %}
+        {% set rival = result.split('상대팀은 ')[1].split('입니다')[0] if '상대팀은 ' in result else '' %}
+
+        {% if avg_time %}
+          <div class="avg-info"><strong>{{ myteam }}{% if rival %} vs {{ rival }}{% endif %}의 평균 경기시간 : {{ avg_time }}분</strong></div>
+
+          <div class="section-graph">
+            {% if avg_time < top30 %}
+              {% set section_name = "속전" %}
+              {% set section_color = "#4CAF50" %}
+              {% set section_width = 33.33 %}
+            {% elif avg_time < avg_ref %}
+              {% set section_name = "평균" %}
+              {% set section_color = "#2196F3" %}
+              {% set section_width = 33.33 %}
             {% else %}
-                <div class="avg-info">과거 경기 데이터가 없습니다.</div>
+              {% set section_name = "초과" %}
+              {% set section_color = "#FF9800" %}
+              {% set section_width = 33.34 %}
             {% endif %}
-        </div>
+
+            {% set diff_percent = ((avg_time - avg_ref) / avg_ref * 100)|round(1) %}
+
+            <div class="section-bar-container">
+              <div class="section-bar" style="background-color: {{ section_color }}; width: {{ section_width }}%;">
+                <span class="section-label">{{ section_name }}</span>
+              </div>
+              <div class="section-percentage">
+                {% if diff_percent > 0 %}+{{ diff_percent }}%{% else %}{{ diff_percent }}%{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="comment">{{ msg }}</div>
+          <div style="font-size:10px;color:#888;">
+            기준: 속전({{ top30 }}분 미만) / 평균({{ top30 }}–{{ avg_ref }}분) / 초과({{ avg_ref }}분 이상)
+          </div>
+        {% else %}
+          <div class="avg-info">과거 경기 데이터가 없습니다.</div>
+          {% if msg %}<div style="font-size:12px;color:#a33;">{{ msg }}</div>{% endif %}
         {% endif %}
-    </div>
+      </div>
+    {% else %}
+      <div style="font-size:13px;color:#666;text-align:center;">
+        팀을 선택하고 <b>조회</b>를 누르면 평균 경기시간을 계산합니다.
+        {% if msg %}<div style="font-size:12px;color:#a33;margin-top:6px;">{{ msg }}</div>{% endif %}
+      </div>
+    {% endif %}
+  </div>
 </body>
 </html>
