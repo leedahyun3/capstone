@@ -31,5 +31,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 엔트리포인트 (A 선택: team_ranking_back_alt가 메인)
-CMD ["sh","-c","gunicorn team_ranking_back_alt:app -b 0.0.0.0:${PORT:-8000} --workers 1 --threads 2 --timeout 180"]
+CMD ["sh","-c","gunicorn app_combined:app -b 0.0.0.0:${PORT:-8000} --workers 1 --threads 2 --timeout 300 --log-level info"]
 
