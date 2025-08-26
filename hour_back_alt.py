@@ -16,15 +16,20 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+# ---------- 환경/상수 ----------
 TOP30   = float(os.getenv("TOP30_MINUTES", "168"))
 AVG_REF = float(os.getenv("AVG_REF_MINUTES", "182.7"))
 BOTTOM70= float(os.getenv("BOTTOM70_MINUTES", "194"))
 MAX_LOOKBACK_DAYS = int(os.getenv("MAX_LOOKBACK_DAYS", "90"))
 
-RUNTIME_CACHE_FILE   = os.getenv("RUNTIME_CACHE_FILE", "runtime_cache.json")
-SCHEDULE_CACHE_FILE  = os.getenv("SCHEDULE_CACHE_FILE", "schedule_index.json")
-HOUR_TEMPLATE        = os.getenv("HOUR_TEMPLATE", "hour_alt.html")
+# JSON 캐시 경로(로컬 개발/DB 미사용 시에만 사용)
+RUNTIME_CACHE_FILE  = os.getenv("RUNTIME_CACHE_FILE", "runtime_cache.json")
+SCHEDULE_CACHE_FILE = os.getenv("SCHEDULE_CACHE_FILE", "schedule_index.json")
 
+# hour_alt.html / hour.html 등 템플릿 이름 선택 가능
+HOUR_TEMPLATE = os.getenv("HOUR_TEMPLATE", "hour_alt.html")
+
+# ---------- JSON 캐시 유틸 ----------
 def _load_json(path, default):
     if os.path.exists(path):
         try:
@@ -60,6 +65,59 @@ def set_schedule_cache_for_date(date_str, games_minimal_list):
 def make_runtime_key(game_id, game_date):
     return f"{game_id}_{game_date}"
 
+# ---------- PostgreSQL 백엔드 (DATABASE_URL 있으면 사용) ----------
+DB_URL = os.getenv("DATABASE_URL")
+if DB_URL:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    def _pg_conn():
+        return psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
+
+    def get_runtime_cache_entry(key: str):
+        with _pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT runtime_min FROM runtime_cache WHERE key=%s", (key,))
+            row = cur.fetchone()
+            return {"runtime_min": row["runtime_min"]} if row else None
+
+    def set_runtime_cache_entry(key: str, runtime_min: int):
+        with _pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO runtime_cache(key, runtime_min) VALUES (%s,%s)
+                ON CONFLICT (key) DO UPDATE SET runtime_min = EXCLUDED.runtime_min, updated_at = now()
+            """, (key, runtime_min))
+            conn.commit()
+
+    def get_schedule_cache_for_date_pg(date_str: str):
+        ds = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}" if len(date_str)==8 and date_str.isdigit() else date_str
+        with _pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT payload FROM schedule_cache WHERE date_str=%s::date", (ds,))
+            row = cur.fetchone()
+            return row["payload"] if row else None
+
+    def set_schedule_cache_for_date_pg(date_str: str, payload: list):
+        ds = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}" if len(date_str)==8 and date_str.isdigit() else date_str
+        with _pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO schedule_cache(date_str, payload) VALUES (%s::date, %s::jsonb)
+                ON CONFLICT (date_str) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+            """, (ds, json.dumps(payload, ensure_ascii=False)))
+            conn.commit()
+else:
+    # DB가 없으면 JSON 파일 캐시 사용
+    def get_runtime_cache_entry(key: str):
+        return get_runtime_cache().get(key)
+
+    def set_runtime_cache_entry(key: str, runtime_min: int):
+        set_runtime_cache(key, runtime_min)
+
+    def get_schedule_cache_for_date_pg(date_str: str):
+        return get_schedule_cache().get(date_str)
+
+    def set_schedule_cache_for_date_pg(date_str: str, payload: list):
+        set_schedule_cache_for_date(date_str, payload)
+
+# ---------- Selenium 드라이버 ----------
 try:
     from webdriver_manager.chrome import ChromeDriverManager  # type: ignore
 except Exception:
@@ -108,6 +166,7 @@ def make_driver() -> webdriver.Chrome:
     service = Service(os.getenv("CHROMEDRIVER_BIN", "/usr/bin/chromedriver"))
     return webdriver.Chrome(service=service, options=opts)
 
+# ---------- 크롤 유틸 ----------
 def get_today_cards(driver):
     wait = WebDriverWait(driver, 20)
     today = datetime.today().strftime("%Y%m%d")
@@ -156,9 +215,9 @@ def find_today_matches_for_team(driver, my_team: str):
     return results
 
 def get_games_for_date(driver, date_str: str):
-    cache = get_schedule_cache()
-    if date_str in cache:
-        return cache[date_str]
+    cached = get_schedule_cache_for_date_pg(date_str)
+    if cached is not None:
+        return cached
 
     wait = WebDriverWait(driver, 15)
     url = f"https://www.koreabaseball.com/Schedule/GameCenter/Main.aspx?gameDate={date_str}"
@@ -166,7 +225,7 @@ def get_games_for_date(driver, date_str: str):
     try:
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
     except Exception:
-        set_schedule_cache_for_date(date_str, [])
+        set_schedule_cache_for_date_pg(date_str, [])
         return []
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
@@ -175,7 +234,7 @@ def get_games_for_date(driver, date_str: str):
         info = extract_match_info_from_card(li)
         if all([info.get("home"), info.get("away"), info.get("g_id"), info.get("g_dt")]):
             games_min.append({k: info[k] for k in ("home","away","g_id","g_dt")})
-    set_schedule_cache_for_date(date_str, games_min)
+    set_schedule_cache_for_date_pg(date_str, games_min)
     return games_min
 
 def open_review_and_get_runtime(driver, game_id: str, game_date: str) -> Optional[int]:
@@ -184,7 +243,7 @@ def open_review_and_get_runtime(driver, game_id: str, game_date: str) -> Optiona
     key = make_runtime_key(game_id, game_date)
 
     if use_cache:
-        hit = get_runtime_cache().get(key)
+        hit = get_runtime_cache_entry(key)
         if hit and "runtime_min" in hit:
             return hit["runtime_min"]
 
@@ -210,7 +269,7 @@ def open_review_and_get_runtime(driver, game_id: str, game_date: str) -> Optiona
             run_min = int(m.group(1))*60 + int(m.group(2))
 
     if use_cache and run_min is not None:
-        set_runtime_cache(key, run_min)
+        set_runtime_cache_entry(key, run_min)
     return run_min
 
 def collect_history_avg_runtime(my_team: str, rival_set: Optional[Set[str]] = None) -> Tuple[Optional[float], List[int]]:
@@ -244,6 +303,7 @@ def collect_history_avg_runtime(my_team: str, rival_set: Optional[Set[str]] = No
         except Exception:
             pass
 
+# ---------- Flask 블루프린트 ----------
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 hour_bp = Blueprint("hour_alt", __name__, template_folder=TEMPLATE_DIR)
 
@@ -256,7 +316,7 @@ def hour_ping():
 def hour_index():
     result = None; avg_time = None; css_class = ""; msg = ""; selected_team = None
 
-    # ✅ GET과 POST 모두 지원 (iframe/프록시에서 POST가 막혀도 동작)
+    # GET과 POST 모두 지원 (iframe/프록시에서 POST 막힘 대비)
     team = request.args.get("team") if request.method == "GET" else request.form.get("myteam")
     if team:
         selected_team = team
@@ -270,7 +330,7 @@ def hour_index():
                 HOUR_TEMPLATE,
                 result=f"{MY_TEAM} 평균 시간 계산 불가",
                 avg_time=None, css_class="",
-                msg="드라이버 실행 실패: Linux 컨테이너에서 chromium/chromedriver 경로 확인.",
+                msg="드라이버 실행 실패: Linux 컨테이너의 chromium/chromedriver 경로 확인.",
                 selected_team=selected_team, top30=TOP30, avg_ref=AVG_REF, bottom70=BOTTOM70
             )
 
@@ -315,6 +375,7 @@ def hour_index():
     except TemplateNotFound:
         return "<div>템플릿이 없습니다.</div>", 200
 
+# ---------- 단독 실행 ----------
 def create_app():
     app = Flask(__name__)
     app.register_blueprint(hour_bp)
@@ -322,4 +383,3 @@ def create_app():
 
 if __name__ == "__main__":
     create_app().run(host="0.0.0.0", port=5002, debug=True, use_reloader=False)
-
