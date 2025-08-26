@@ -9,10 +9,10 @@ import requests
 from jinja2 import TemplateNotFound
 
 from team_ranking_alt import fetch_team_rankings
-from hour_back_alt import hour_bp  # ⬅️ /hour 블루프린트
+from shorts_back_alt import shorts_bp   # ✅ 숏츠만 사용 (hour 제거)
 
 app = Flask(__name__, template_folder="templates")
-app.register_blueprint(hour_bp)
+app.register_blueprint(shorts_bp)       # ✅ /shorts, /shorts/ping 활성화
 
 # ---- 설정 ----
 CACHE_FILE = os.getenv("CACHE_FILE", os.path.join(os.getcwd(), "cache.json"))
@@ -85,7 +85,7 @@ def dashboard():
         return render_template("combined.html")
     except TemplateNotFound:
         return ('<h3>대시보드</h3>'
-                '<p><a href="/team-ranking">팀 순위</a> · <a href="/hour">평균 경기시간</a></p>', 200)
+                '<p><a href="/team-ranking">팀 순위</a> · <a href="/shorts">숏츠</a></p>', 200)
 
 # ============== 팀 순위 ==============
 @app.route("/team-ranking")
@@ -153,4 +153,3 @@ if not _cache_data["rankings"]:
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
-
